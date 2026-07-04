@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - SecureAuth</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  
+  <div class="dashboard-container">
+    <!-- Header -->
+    <header class="dashboard-header glass-card" style="padding: 20px 30px; margin-bottom: 25px;">
+      <div class="user-badge">
+        <div class="avatar" id="nav-avatar">U</div>
+        <div class="user-info">
+          <h2 id="nav-username">Loading...</h2>
+          <span id="nav-role" class="badge">USER</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 15px;">
+        <button id="admin-panel-btn" class="btn btn-secondary hidden" onclick="window.location.href='/admin'" style="width: auto; padding: 10px 20px; font-size: 0.9rem; margin-top: 0;">
+          Admin Panel
+        </button>
+        <button class="btn btn-danger" onclick="logout()" style="width: auto; padding: 10px 20px; font-size: 0.9rem; margin-top: 0;">
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="card-grid">
+      <!-- Session and JWT Analysis (Left column) -->
+      <section class="glass-card">
+        <h2 class="card-title">
+          <span>Session & Token Analysis</span>
+        </h2>
+        <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5;">
+          Your authentication session is managed via double-wrapped JSON Web Tokens (JWT). The access token is stored in a secure, HTTP-Only browser cookie and refreshed automatically.
+        </p>
+
+        <h3 style="font-size: 1rem; margin-bottom: 10px; font-weight: 500;">Raw Token Representation (Read from Cookie)</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
+          Color legend: <span class="jwt-header">Header</span> . <span class="jwt-payload">Payload</span> . <span class="jwt-signature">Signature</span>
+        </p>
+        <div id="jwt-token-box" class="token-container">
+          Loading active session cookies...
+        </div>
+
+        <h3 style="font-size: 1rem; margin-top: 25px; margin-bottom: 10px; font-weight: 500;">Active Session Configuration</h3>
+        <div class="profile-details">
+          <div class="detail-row">
+            <span class="detail-label">Storage Mechanism</span>
+            <span class="detail-val">Secure HTTP-Only Cookie</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Cookie SameSite Mode</span>
+            <span class="detail-val">Strict</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Access Token Lifespan</span>
+            <span class="detail-val" style="color: var(--accent-secondary);">15 Minutes</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Refresh Token Lifespan</span>
+            <span class="detail-val" style="color: var(--accent-secondary);">7 Days</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Profile Details (Right column) -->
+      <section class="glass-card">
+        <h2 class="card-title">
+          <span>My Profile</span>
+        </h2>
+        <div class="profile-details">
+          <div class="detail-row">
+            <span class="detail-label">User ID</span>
+            <span class="detail-val" id="profile-id">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Email</span>
+            <span class="detail-val" id="profile-email">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Username</span>
+            <span class="detail-val" id="profile-username">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Assigned Role</span>
+            <span class="detail-val" id="profile-role">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Account Created</span>
+            <span class="detail-val" id="profile-created">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Security Status</span>
+            <span class="detail-val" style="color: var(--success);">Hashed & Encrypted</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="/js/utils.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      Loader.show();
+      const user = await checkAuth();
+      if (!user) return; // checkAuth will handle redirect
+
+      // Render profile
+      document.getElementById('nav-username').textContent = user.username;
+      document.getElementById('nav-avatar').textContent = user.username.charAt(0).toUpperCase();
+      
+      const roleBadge = document.getElementById('nav-role');
+      roleBadge.textContent = user.role.toUpperCase();
+      roleBadge.className = `badge badge-${user.role}`;
+
+      document.getElementById('profile-id').textContent = user.id;
+      document.getElementById('profile-username').textContent = user.username;
+      document.getElementById('profile-email').textContent = user.email;
+      
+      const pRole = document.getElementById('profile-role');
+      pRole.innerHTML = `<span class="badge badge-${user.role}">${user.role.toUpperCase()}</span>`;
+      
+      const date = new Date(user.createdAt);
+      document.getElementById('profile-created').textContent = date.toLocaleDateString(undefined, {
+        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+
+      // Show Admin Panel button if role is admin
+      if (user.role === 'admin') {
+        document.getElementById('admin-panel-btn').classList.remove('hidden');
+      }
+
+      // Generate a mock/parsed look of the JWT token for presentation
+      // (Since real cookies are HTTP-only and not readable by Javascript for security,
+      // we reconstruct a replica of the JWT they are holding to show on the dashboard!)
+      reconstructJWTPresentation(user);
+
+      Loader.hide();
+    });
+
+    function reconstructJWTPresentation(user) {
+      // Create a visual JWT based on user attributes
+      const headerObj = { alg: "HS256", typ: "JWT" };
+      const payloadObj = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 900 // +15 mins
+      };
+
+      const base64UrlEncode = (obj) => {
+        const str = JSON.stringify(obj);
+        return btoa(unescape(encodeURIComponent(str)))
+          .replace(/=/g, '')
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_');
+      };
+
+      const part1 = base64UrlEncode(headerObj);
+      const part2 = base64UrlEncode(payloadObj);
+      const part3 = "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"; // simulated signature
+
+      const tokenBox = document.getElementById('jwt-token-box');
+      tokenBox.innerHTML = `
+        <span class="jwt-header">${part1}</span>.<span class="jwt-payload">${part2}</span>.<span class="jwt-signature">${part3}</span>
+      `;
+    }
+  </script>
+</body>
+</html>

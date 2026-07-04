@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - SecureAuth</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  
+  <div class="dashboard-container" style="max-width: 1000px;">
+    <!-- Header -->
+    <header class="dashboard-header glass-card" style="padding: 20px 30px; margin-bottom: 25px;">
+      <div class="user-badge">
+        <div class="avatar" id="nav-avatar" style="background: linear-gradient(135deg, #ff1744 0%, #aa00ff 100%);">A</div>
+        <div class="user-info">
+          <h2 id="nav-username">Admin</h2>
+          <span id="nav-role" class="badge badge-admin">ADMINISTRATOR</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 15px;">
+        <button class="btn btn-secondary" onclick="window.location.href='/dashboard'" style="width: auto; padding: 10px 20px; font-size: 0.9rem; margin-top: 0;">
+          User Dashboard
+        </button>
+        <button class="btn btn-danger" onclick="logout()" style="width: auto; padding: 10px 20px; font-size: 0.9rem; margin-top: 0;">
+          Sign Out
+        </button>
+      </div>
+    </header>
+
+    <!-- Admin User Table Card -->
+    <section class="glass-card">
+      <h2 class="card-title">
+        <span>User Management Console</span>
+      </h2>
+      <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 25px; line-height: 1.5;">
+        As an Administrator, you have full visibility over registration databases and can assign roles or revoke accounts. Modifying a user's role takes effect immediately on their next authentication query.
+      </p>
+
+      <div class="data-table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Joined Date</th>
+              <th>Privileges</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="user-table-body">
+            <tr>
+              <td colspan="6" class="text-center" style="color: var(--text-muted); padding: 30px;">
+                Loading user registers...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/js/utils.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    let currentAdminUser = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      Loader.show();
+      // Guard page for Admin role only
+      const user = await checkAuth('admin');
+      if (!user) return; // checkAuth will handle redirect
+
+      currentAdminUser = user;
+
+      document.getElementById('nav-username').textContent = user.username;
+      document.getElementById('nav-avatar').textContent = user.username.charAt(0).toUpperCase();
+
+      // Load user database
+      await loadUsers();
+      Loader.hide();
+    });
+
+    async function loadUsers() {
+      try {
+        const response = await fetchAPI('/api/admin/users');
+        const data = await response.json();
+        
+        if (!response.ok) {
+          Toast.error(data.error || 'Failed to load users');
+          return;
+        }
+
+        const tbody = document.getElementById('user-table-body');
+        tbody.innerHTML = '';
+
+        if (data.users.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="color: var(--text-muted); padding: 20px;">No users found</td></tr>`;
+          return;
+        }
+
+        data.users.forEach(u => {
+          const row = document.createElement('tr');
+          const isSelf = u.id === currentAdminUser.id;
+          
+          const date = new Date(u.createdAt).toLocaleDateString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric'
+          });
+
+          row.innerHTML = `
+            <td style="font-family: monospace; font-size: 0.85rem; color: var(--text-muted);">${u.id}</td>
+            <td style="font-weight: 500;">${u.username} ${isSelf ? '<span style="color: var(--accent-secondary); font-size: 0.75rem;">(You)</span>' : ''}</td>
+            <td>${u.email}</td>
+            <td>${date}</td>
+            <td>
+              <div class="input-wrapper" style="width: 110px;">
+                <select class="role-select" onchange="changeRole('${u.id}', this.value)" ${isSelf ? 'disabled' : ''} style="padding: 6px 10px; font-size: 0.85rem;">
+                  <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+                  <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                </select>
+              </div>
+            </td>
+            <td>
+              <div class="action-btn-group">
+                <button class="action-btn action-btn-danger" onclick="deleteUserAccount('${u.id}')" ${isSelf ? 'disabled' : ''}>
+                  Delete
+                </button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(row);
+        });
+      } catch (err) {
+        console.error(err);
+        Toast.error('An error occurred loading the users list.');
+      }
+    }
+
+    async function changeRole(userId, newRole) {
+      Loader.show();
+      try {
+        const response = await fetchAPI(`/api/admin/users/${userId}/role`, {
+          method: 'PUT',
+          body: JSON.stringify({ role: newRole })
+        });
+        const data = await response.json();
+        Loader.hide();
+
+        if (response.ok) {
+          Toast.success(`Role updated successfully to ${newRole}`);
+          await loadUsers();
+        } else {
+          Toast.error(data.error || 'Failed to update role');
+          await loadUsers(); // reload to reset dropdown state
+        }
+      } catch (err) {
+        Loader.hide();
+        console.error(err);
+        Toast.error('Error contacting server to update role');
+        await loadUsers();
+      }
+    }
+
+    async function deleteUserAccount(userId) {
+      if (!confirm('Are you absolutely sure you want to permanently delete this user? This action cannot be undone.')) {
+        return;
+      }
+
+      Loader.show();
+      try {
+        const response = await fetchAPI(`/api/admin/users/${userId}`, {
+          method: 'DELETE'
+        });
+        const data = await response.json();
+        Loader.hide();
+
+        if (response.ok) {
+          Toast.success('User deleted successfully');
+          await loadUsers();
+        } else {
+          Toast.error(data.error || 'Failed to delete user');
+        }
+      } catch (err) {
+        Loader.hide();
+        console.error(err);
+        Toast.error('Error contacting server to delete user');
+      }
+    }
+  </script>
+</body>
+</html>

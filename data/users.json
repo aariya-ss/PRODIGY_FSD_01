@@ -1,0 +1,12 @@
+[
+  {
+    "id": "mr6hr9q3uba38",
+    "username": "aariya",
+    "email": "ssaariya0@gmail.com",
+    "password": "$2a$12$FpIRp2FMpOu//vfsUPwaUe4OZbxNvZ7SRQoG5DrmV2xYVe7Pc7.Hq",
+    "role": "admin",
+    "createdAt": "2026-07-04T15:02:36.027Z",
+    "updatedAt": "2026-07-04T15:02:36.837Z",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Im1yNmhyOXEzdWJhMzgiLCJpYXQiOjE3ODMxNzczNTYsImV4cCI6MTc4Mzc4MjE1Nn0.2owogjYQFglX_EVuGhZeZYFxKr3tZFTq58dKSw7lE8s"
+  }
+]

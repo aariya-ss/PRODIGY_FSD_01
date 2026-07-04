@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureAuth - Modern Authentication System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  
+  <div class="container">
+    <div class="brand">
+      <h1>SecureAuth</h1>
+      <p>Enterprise JWT Hashed Authentication</p>
+    </div>
+
+    <div class="glass-card">
+      <!-- Tabs for toggling login/signup -->
+      <div class="tabs">
+        <button id="login-tab" class="tab-btn active" onclick="switchTab('login')">Sign In</button>
+        <button id="register-tab" class="tab-btn" onclick="switchTab('register')">Register</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-username">Username or Email</label>
+          <div class="input-wrapper">
+            <input type="text" id="login-username" placeholder="e.g. johndoe" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <div class="input-wrapper">
+            <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+            <button type="button" class="toggle-pwd" onclick="togglePasswordVisibility('login-password')">Show</button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn">
+          Sign In
+        </button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="hidden" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label for="reg-username">Username</label>
+          <div class="input-wrapper">
+            <input type="text" id="reg-username" placeholder="e.g. johndoe" required autocomplete="username" minlength="3" maxlength="20">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-email">Email Address</label>
+          <div class="input-wrapper">
+            <input type="email" id="reg-email" placeholder="e.g. john@example.com" required autocomplete="email">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-password">Password</label>
+          <div class="input-wrapper">
+            <input type="password" id="reg-password" placeholder="Min. 8 characters" required autocomplete="new-password" oninput="onPasswordInput(event)">
+            <button type="button" class="toggle-pwd" onclick="togglePasswordVisibility('reg-password')">Show</button>
+          </div>
+          <!-- Live strength meter -->
+          <div class="pwd-strength-container">
+            <div class="pwd-strength-bar">
+              <div id="pwd-strength-fill" class="pwd-strength-fill"></div>
+            </div>
+            <span id="pwd-strength-text" class="pwd-strength-text">Password strength</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-role">Default Account Role</label>
+          <div class="input-wrapper">
+            <select id="reg-role" required>
+              <option value="user" selected>Standard User</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" class="btn">
+          Create Account
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/utils.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    // Check if user is already logged in
+    document.addEventListener('DOMContentLoaded', () => {
+      checkAuth();
+      
+      // Check if redirected because of expired session
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('expired') === 'true') {
+        Toast.info('Your session has expired. Please login again.');
+      }
+    });
+
+    function switchTab(tab) {
+      const loginForm = document.getElementById('login-form');
+      const registerForm = document.getElementById('register-form');
+      const loginTab = document.getElementById('login-tab');
+      const registerTab = document.getElementById('register-tab');
+
+      if (tab === 'login') {
+        loginForm.classList.remove('hidden');
+        registerForm.classList.add('hidden');
+        loginTab.classList.add('active');
+        registerTab.classList.remove('active');
+      } else {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        loginTab.classList.remove('active');
+        registerTab.classList.add('active');
+      }
+    }
+
+    function togglePasswordVisibility(inputId) {
+      const input = document.getElementById(inputId);
+      const btn = input.nextElementSibling;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = 'Hide';
+      } else {
+        input.type = 'password';
+        btn.textContent = 'Show';
+      }
+    }
+
+    // Live password strength feedback
+    function onPasswordInput(e) {
+      const password = e.target.value;
+      const fill = document.getElementById('pwd-strength-fill');
+      const text = document.getElementById('pwd-strength-text');
+      
+      const result = checkPasswordStrength(password);
+      
+      const percent = (result.score / 4) * 100;
+      fill.style.width = `${percent}%`;
+      fill.style.backgroundColor = result.color;
+      text.textContent = `Strength: ${result.text}`;
+      text.style.color = result.color;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      
+      const usernameOrEmail = document.getElementById('login-username').value;
+      const password = document.getElementById('login-password').value;
+
+      Loader.show();
+      try {
+        const response = await fetchAPI('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ usernameOrEmail, password })
+        });
+        
+        const data = await response.json();
+        Loader.hide();
+
+        if (response.ok) {
+          Toast.success(`Welcome back, ${data.user.username}!`);
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 1000);
+        } else {
+          Toast.error(data.error || 'Login failed');
+        }
+      } catch (err) {
+        Loader.hide();
+        console.error(err);
+        Toast.error('An unexpected error occurred during login');
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+
+      const username = document.getElementById('reg-username').value;
+      const email = document.getElementById('reg-email').value;
+      const password = document.getElementById('reg-password').value;
+      const role = document.getElementById('reg-role').value;
+
+      // Basic validation check
+      if (password.length < 8) {
+        Toast.error('Password must be at least 8 characters long');
+        return;
+      }
+
+      Loader.show();
+      try {
+        const response = await fetchAPI('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ username, email, password, role })
+        });
+
+        const data = await response.json();
+        Loader.hide();
+
+        if (response.ok) {
+          Toast.success('Account created! Logging you in...');
+          
+          // Auto login after registration
+          try {
+            const loginRes = await fetchAPI('/api/auth/login', {
+              method: 'POST',
+              body: JSON.stringify({ usernameOrEmail: username, password })
+            });
+            if (loginRes.ok) {
+              setTimeout(() => {
+                window.location.href = '/dashboard';
+              }, 1200);
+            } else {
+              switchTab('login');
+              document.getElementById('login-username').value = username;
+            }
+          } catch (loginErr) {
+            switchTab('login');
+          }
+        } else {
+          Toast.error(data.error || 'Registration failed');
+        }
+      } catch (err) {
+        Loader.hide();
+        console.error(err);
+        Toast.error('An unexpected error occurred during registration');
+      }
+    }
+  </script>
+</body>
+</html>
